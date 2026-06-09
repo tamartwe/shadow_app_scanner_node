@@ -1,4 +1,8 @@
-export type AuthType = "none" | "basic" | "oauth" | "saml";
+import { z } from "zod";
+import { AuthTypeSchema } from "../schemas/traffic.schema";
+
+// Derived from the Zod enum — single source of truth
+export type AuthType = z.infer<typeof AuthTypeSchema>;
 
 export interface TrafficRecord {
   id: string;

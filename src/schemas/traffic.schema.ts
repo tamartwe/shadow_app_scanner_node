@@ -1,11 +1,13 @@
 import { z } from "zod";
 
+export const AuthTypeSchema = z.enum(["none", "basic", "oauth", "saml"], {
+  error: "authType must be one of: none, basic, oauth, saml",
+});
+
 export const TrafficRecordSchema = z.object({
   sourceIp: z.ipv4({ error: "sourceIp must be a valid IPv4 address" }),
   destinationApp: z.string().min(1, "destinationApp is required").trim(),
-  authType: z.enum(["none", "basic", "oauth", "saml"], {
-    error: "authType must be one of: none, basic, oauth, saml",
-  }),
+  authType: AuthTypeSchema,
   userId: z.string().min(1, "userId is required").trim(),
   timestamp: z
     .string()
