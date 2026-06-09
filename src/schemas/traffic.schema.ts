@@ -1,13 +1,7 @@
 import { z } from "zod";
 
 export const TrafficRecordSchema = z.object({
-  sourceIp: z
-    .string()
-    .min(1, "sourceIp is required")
-    .regex(
-      /^(\d{1,3}\.){3}\d{1,3}$/,
-      "sourceIp must be a valid IPv4 address"
-    ),
+  sourceIp: z.ipv4({ error: "sourceIp must be a valid IPv4 address" }),
   destinationApp: z.string().min(1, "destinationApp is required").trim(),
   authType: z.enum(["none", "basic", "oauth", "saml"], {
     error: "authType must be one of: none, basic, oauth, saml",

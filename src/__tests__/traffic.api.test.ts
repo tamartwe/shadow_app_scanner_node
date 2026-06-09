@@ -92,6 +92,31 @@ describe("POST /api/traffic", () => {
     });
   });
 
+  it("rejects out-of-range octets that the old digit-count regex accepted", async () => {
+    const invalidIps = ["256.0.0.1", "999.999.999.999", "192.168.1.300", "0.0.0.256"];
+
+    for (const sourceIp of invalidIps) {
+      const res = await request(app)
+        .post("/api/traffic")
+        .send({ ...VALID_RECORD, sourceIp });
+
+      expect(res.status).toBe(400);
+      expect(res.body.details.sourceIp).toBeDefined();
+    }
+  });
+
+  it("accepts all valid IPv4 boundary values", async () => {
+    const validIps = ["0.0.0.0", "255.255.255.255", "192.168.1.1", "10.0.0.1"];
+
+    for (const sourceIp of validIps) {
+      const res = await request(app)
+        .post("/api/traffic")
+        .send({ ...VALID_RECORD, sourceIp });
+
+      expect(res.status).toBe(201);
+    }
+  });
+
   it("returns 400 when body is missing entirely", async () => {
     const res = await request(app)
       .post("/api/traffic")
