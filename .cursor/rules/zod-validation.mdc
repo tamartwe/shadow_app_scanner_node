@@ -1,0 +1,81 @@
+---
+description: Use Zod for all API input validation — request body, query params, and route params
+globs: "**/*.{ts,js}"
+alwaysApply: false
+---
+
+# Zod Schema Validation
+
+All external input entering the API must be validated with Zod before reaching the service layer.
+
+## Where validation lives
+
+| Input source | Validated in | Schema lives in |
+|---|---|---|
+| Request body | Controller | `src/schemas/*.schema.ts` |
+| Query params | Controller | `src/schemas/*.schema.ts` |
+| Route params | Controller | `src/schemas/*.schema.ts` |
+| Env vars | App startup | `src/config.ts` |
+
+## Schema file conventions
+
+```typescript
+// src/schemas/traffic.schema.ts
+import { z } from 'zod';
+
+export const TrafficRecordSchema = z.object({
+  sourceIp: z.string().min(1).regex(/^(\d{1,3}\.){3}\d{1,3}$/, 'must be a valid IPv4'),
+  destinationApp: z.string().min(1).trim(),
+  authType: z.enum(['none', 'basic', 'oauth', 'saml']),
+  userId: z.string().min(1).trim(),
+  timestamp: z.string().datetime(),
+});
+
+// Always export the inferred type — never write it by hand
+export type TrafficRecordInput = z.infer<typeof TrafficRecordSchema>;
+```
+
+## Controller usage — always use `safeParse`
+
+```typescript
+// Request body
+const result = TrafficRecordSchema.safeParse(req.body);
+if (!result.success) {
+  res.status(400).json({ error: 'Validation failed', details: result.error.flatten().fieldErrors });
+  return;
+}
+const input: TrafficRecordInput = result.data; // fully typed, safe to pass to service
+
+// Query params (strings → numbers via .transform + .pipe)
+export const PaginationSchema = z.object({
+  page: z.string().optional().default('1').transform(Number).pipe(z.number().int().min(1)),
+  limit: z.string().optional().default('20').transform(Number).pipe(z.number().int().min(1).max(100)),
+});
+```
+
+## Rules
+
+- All schemas live in `src/schemas/` — never inline `z.object(...)` inside a controller or service
+- Always use `safeParse`, never `parse` — `parse` throws and bypasses structured error responses
+- Always export `z.infer<typeof Schema>` as the input type — never duplicate the type manually
+- Services receive the already-validated type, never `req.body` directly
+- Shared shapes (pagination, IDs) get their own reusable schema file
+
+## Anti-patterns
+
+```typescript
+// ❌ manual type checking instead of Zod
+if (!req.body.userId || typeof req.body.userId !== 'string') { ... }
+
+// ❌ parse() instead of safeParse() — throws an uncontrolled error
+const input = TrafficRecordSchema.parse(req.body);
+
+// ❌ passing raw req.body to the service
+this.service.ingest(req.body);
+
+// ❌ type duplicated by hand
+type TrafficRecordInput = { sourceIp: string; destinationApp: string; ... }; // use z.infer instead
+
+// ❌ schema defined inline in the controller
+const result = z.object({ id: z.string() }).safeParse(req.params);
+```

@@ -1,0 +1,101 @@
+---
+description: Enforce ESLint + Prettier with Airbnb standard on every Node.js/TypeScript project
+globs: "**/*.{ts,js,json}"
+alwaysApply: false
+---
+
+# ESLint + Prettier (Airbnb Standard)
+
+Every Node.js project must have ESLint and Prettier configured from the start.
+
+## Required packages
+
+```bash
+# TypeScript project
+npm install --save-dev \
+  eslint \
+  prettier \
+  eslint-config-airbnb-base \
+  eslint-config-airbnb-typescript \
+  eslint-plugin-import \
+  @typescript-eslint/eslint-plugin \
+  @typescript-eslint/parser \
+  eslint-config-prettier \
+  eslint-plugin-prettier
+```
+
+## `eslint.config.mjs` (flat config — ESLint v9+)
+
+```js
+import airbnbBase from 'eslint-config-airbnb-base';
+import airbnbTS from 'eslint-config-airbnb-typescript';
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+import importPlugin from 'eslint-plugin-import';
+import prettierPlugin from 'eslint-plugin-prettier';
+import prettierConfig from 'eslint-config-prettier';
+
+export default [
+  { ignores: ['dist/', 'node_modules/', 'coverage/'] },
+  {
+    files: ['**/*.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { project: './tsconfig.json' },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      import: importPlugin,
+      prettier: prettierPlugin,
+    },
+    rules: {
+      ...airbnbBase.rules,
+      ...airbnbTS.rules,
+      ...prettierConfig.rules,
+      'prettier/prettier': 'error',
+      'no-console': 'error',
+    },
+  },
+];
+```
+
+## `.prettierrc`
+
+```json
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "semi": true,
+  "tabWidth": 2
+}
+```
+
+## `package.json` scripts
+
+```json
+{
+  "scripts": {
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write ."
+  }
+}
+```
+
+## Rules
+
+- `eslint-config-prettier` must always be last — it disables ESLint rules that conflict with Prettier
+- `no-console` must be `'error'` — use the structured logger instead
+- Never disable rules with `// eslint-disable` without a comment explaining why
+- CI must run `npm run lint` — lint failures block merges
+- `prettier --check .` should also run in CI to catch unformatted files
+
+## Anti-patterns
+
+```jsonc
+// ❌ missing prettier integration — ESLint and Prettier fight each other
+// ❌ eslint-config-prettier not last in extends array
+// ❌ no-console set to 'warn' instead of 'error'
+// ❌ console.log left in code because lint only warns
+```

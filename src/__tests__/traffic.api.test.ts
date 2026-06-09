@@ -1,6 +1,11 @@
 import request from "supertest";
-import { Application } from "express";
+import express, { Application } from "express";
+import { MemoryStore } from "express-rate-limit";
 import { createApp } from "../app";
+import { TrafficController } from "../controllers/traffic.controller";
+import { TrafficService } from "../services/traffic.service";
+import { createTrafficRouter } from "../routes/traffic.routes";
+import { createTrafficRateLimit } from "../middleware/trafficRateLimit";
 
 const VALID_RECORD = {
   sourceIp: "192.168.1.1",
@@ -500,5 +505,31 @@ describe("Unknown routes", () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Route not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Global error handler — service throws unexpectedly
+// ---------------------------------------------------------------------------
+describe("Global error handler", () => {
+  it("returns 500 with consistent { error } shape when service throws", async () => {
+    const throwingService = { ingest: () => { throw new Error("boom"); } } as any;
+    const controller = new TrafficController(throwingService);
+    const router = createTrafficRouter(controller, createTrafficRateLimit(new MemoryStore()));
+
+    const faultyApp = express();
+    faultyApp.use(express.json());
+    faultyApp.use("/api", router);
+    faultyApp.use((_req: any, res: any) =>
+      res.status(404).json({ error: "Route not found" })
+    );
+    faultyApp.use((err: Error, _req: any, res: any, _next: any) =>
+      res.status(500).json({ error: "Internal server error" })
+    );
+
+    const res = await request(faultyApp).post("/api/traffic").send(VALID_RECORD);
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Internal server error" });
   });
 });

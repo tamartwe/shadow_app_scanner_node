@@ -1,0 +1,86 @@
+---
+description: Every controller method must wrap its body in try/catch and forward errors to next()
+globs: src/controllers/**/*.ts
+alwaysApply: false
+---
+
+# Controller Error Handling
+
+Every controller method must wrap its entire body in a `try/catch`. Unhandled throws crash the process or hang the request.
+
+## Pattern
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import logger from '../logger';
+
+methodName(req: Request, res: Response, next: NextFunction): void {
+  try {
+    // validation, service call, response
+  } catch (err) {
+    logger.error('methodName failed', { error: err });
+    next(err);
+  }
+}
+```
+
+## Rules
+
+- Every controller method signature must include `next: NextFunction`
+- The entire method body goes inside `try` — including input validation
+- The `catch` block must: (1) log the error with context, (2) call `next(err)` — never `res.status(500)` directly
+- `next(err)` forwards to the Express global error handler in `app.ts`, which owns the 500 response
+- For `async` methods, `try/catch` still applies — do not rely on unhandled promise rejection
+
+## Correct (sync)
+
+```typescript
+ingestTraffic(req: Request, res: Response, next: NextFunction): void {
+  try {
+    const parseResult = TrafficRecordSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: 'Validation failed', details: parseResult.error.flatten().fieldErrors });
+      return;
+    }
+    const result = this.service.ingest(parseResult.data);
+    res.status(201).json(result);
+  } catch (err) {
+    logger.error('ingestTraffic failed', { error: err });
+    next(err);
+  }
+}
+```
+
+## Correct (async)
+
+```typescript
+async getUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = await this.service.findById(req.params.id);
+    if (!user) { res.status(404).json({ error: 'Not found' }); return; }
+    res.status(200).json({ user });
+  } catch (err) {
+    logger.error('getUser failed', { error: err });
+    next(err);
+  }
+}
+```
+
+## Anti-patterns
+
+```typescript
+// ❌ no try/catch — an unexpected throw hangs the request
+getStats(_req: Request, res: Response): void {
+  res.status(200).json(this.service.getStats());
+}
+
+// ❌ catch swallows the error silently
+} catch (err) {
+  res.status(500).json({ error: 'Internal server error' }); // bypasses global handler + loses stack
+}
+
+// ❌ catch logs but forgets next()
+} catch (err) {
+  logger.error('failed', { error: err }); // request hangs — never responded
+}
+```

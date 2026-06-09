@@ -1,0 +1,66 @@
+---
+description: Enforce structured logger (pino/winston) — never use console.log/warn/error
+globs: **/*.ts
+alwaysApply: false
+---
+
+# Structured Logging
+
+## Rule
+
+Always use a structured logger. Never use `console.log`, `console.warn`, `console.error`, or `console.info` anywhere in application code.
+
+## Setup
+
+Create `src/logger.ts` as the single logger instance, exported as default:
+
+```typescript
+// pino (preferred for production — fast, JSON output)
+import pino from 'pino';
+export default pino({ level: process.env.LOG_LEVEL ?? 'info' });
+
+// winston (also acceptable)
+import { createLogger, format, transports } from 'winston';
+export default createLogger({
+  level: process.env.LOG_LEVEL ?? 'info',
+  format: format.combine(format.timestamp(), format.errors({ stack: true }), format.json()),
+  transports: [new transports.Console()],
+});
+```
+
+## Usage
+
+```typescript
+import logger from '../logger';
+
+// ✅ correct
+logger.info('Traffic ingested', { appName, userId });
+logger.warn('Rate limit approaching', { ip });
+logger.error('Failed to save record', { error });
+
+// ❌ never
+console.log('Traffic ingested');
+console.error(error);
+```
+
+## Rules
+
+- One `src/logger.ts` file — import it everywhere, never create a second logger instance
+- Always pass structured context as a second argument, not string interpolation
+- Use `LOG_LEVEL` env var to control verbosity — never hardcode `'debug'`
+- In error handlers, always log both `message` and `stack`: `logger.error(err.message, { stack: err.stack })`
+- Tests may suppress log output by setting `LOG_LEVEL=silent` in the test env
+
+## Anti-patterns
+
+```typescript
+// ❌ console anywhere in app code
+console.log('server started');
+console.error(err);
+
+// ❌ string interpolation instead of structured context
+logger.info(`User ${userId} accessed ${appName}`);
+
+// ❌ multiple logger instances
+const myLogger = pino(); // create it in logger.ts and import it
+```
