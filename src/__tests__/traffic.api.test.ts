@@ -195,6 +195,23 @@ describe("GET /api/apps", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Invalid pagination parameters");
   });
+
+  it("does not move app lastSeen backwards when an out-of-order event arrives", async () => {
+    const laterTimestamp = "2026-07-01T12:00:00.000Z";
+    const earlierTimestamp = "2025-01-01T00:00:00.000Z";
+
+    await request(app)
+      .post("/api/traffic")
+      .send({ ...VALID_RECORD, timestamp: laterTimestamp });
+
+    // Out-of-order: older timestamp arrives after the newer one
+    await request(app)
+      .post("/api/traffic")
+      .send({ ...VALID_RECORD, timestamp: earlierTimestamp });
+
+    const res = await request(app).get("/api/apps/slack");
+    expect(res.body.app.lastSeen).toBe(laterTimestamp);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -379,6 +396,25 @@ describe("GET /api/apps/:id/users", () => {
 
     expect(u1.lastSeen).toBe(laterTimestamp);
     expect(u1.firstSeen).toBe(VALID_RECORD.timestamp);
+  });
+
+  it("does not move lastSeen backwards when an out-of-order event arrives (user level)", async () => {
+    const laterTimestamp = "2026-07-01T12:00:00.000Z";
+    const earlierTimestamp = "2025-01-01T00:00:00.000Z";
+
+    await request(app)
+      .post("/api/traffic")
+      .send({ ...VALID_RECORD, userId: "user-1", timestamp: laterTimestamp });
+
+    // Out-of-order: older timestamp arrives after the newer one
+    await request(app)
+      .post("/api/traffic")
+      .send({ ...VALID_RECORD, userId: "user-1", timestamp: earlierTimestamp });
+
+    const res = await request(app).get(`/api/apps/${appId}/users`);
+    const u1 = res.body.users.find((u: any) => u.userId === "user-1");
+
+    expect(u1.lastSeen).toBe(laterTimestamp);
   });
 
   it("paginates correctly — page 1 of 2 with limit=1", async () => {

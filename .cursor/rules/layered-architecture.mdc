@@ -1,0 +1,74 @@
+---
+description: Enforce layered architecture for Express APIs — Model / Repository / Service / Controller / Router
+globs: **/*.ts
+alwaysApply: false
+---
+
+# Layered Architecture for Express APIs
+
+Every feature must be split across five layers. Never skip or merge layers.
+
+## Layer Responsibilities
+
+| Layer | File | Responsibility |
+|---|---|---|
+| Model | `models/*.model.ts` | TypeScript types/interfaces only — no logic |
+| Repository | `repositories/*.repository.ts` | All storage access — no business logic |
+| Service | `services/*.service.ts` | Business logic only — no HTTP, no storage calls |
+| Controller | `controllers/*.controller.ts` | HTTP only: parse req → call service → send res |
+| Router | `routes/*.routes.ts` | Wire controller methods to Express routes |
+
+## Rules
+
+- **Services** never import from `express` and never touch storage directly
+- **Controllers** never contain `if/else` business logic — delegate everything to the service
+- **Repositories** expose named query methods (`findById`, `save`, `findPaginated`) — no raw storage outside the repo
+- **Routers** are factory functions `createXRouter(controller, ...middleware): Router`
+- **Models** are plain `interface` / `type` definitions — no classes, no methods
+
+## Correct structure
+
+```
+src/
+  models/        traffic.model.ts       ← types only
+  repositories/  traffic.repository.ts  ← storage access
+  services/      traffic.service.ts     ← business logic
+  controllers/   traffic.controller.ts  ← HTTP layer
+  routes/        traffic.routes.ts      ← routing
+  schemas/       traffic.schema.ts      ← input validation (Zod etc.)
+```
+
+## Anti-patterns
+
+```typescript
+// ❌ service touches express
+import { Request } from 'express';
+export class TrafficService {
+  handle(req: Request) { ... }
+}
+
+// ❌ controller contains business logic
+ingestTraffic(req, res) {
+  const existing = this.repo.findByName(req.body.app); // NO — go through service
+  if (existing) { existing.count++; }
+}
+
+// ❌ service queries storage directly
+export class TrafficService {
+  private cache = new LRUCache(...); // NO — use a repository
+}
+
+// ❌ route handler inline in router file
+router.post('/traffic', (req, res) => {
+  const record = { ...req.body, id: uuid() }; // NO — move to controller + service
+});
+```
+
+## Repository contract
+
+Every repository must implement:
+- `save(entity)` — persist
+- `findById(id)` — single lookup
+- `findAll()` / `findPaginated(page, limit)` — bulk reads
+- `count()` — aggregate
+- `clear()` — test teardown

@@ -61,13 +61,13 @@ export class AppRepository {
       return { app: newApp, isNew: true };
     }
 
-    existing.lastSeen = seenAt;
+    if (seenAt > existing.lastSeen) existing.lastSeen = seenAt;
     existing.authTypesUsed.add(authType);
     existing.trafficCount += 1;
 
     const access = existing.userAccess.get(userId);
     if (access) {
-      access.lastSeen = seenAt;
+      if (seenAt > access.lastSeen) access.lastSeen = seenAt;
       access.authTypesUsed.add(authType);
     } else {
       existing.userAccess.set(userId, {
