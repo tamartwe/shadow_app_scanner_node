@@ -5,7 +5,7 @@ import logger from "../logger";
 const CAPACITY = 10_000;
 const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 1 month
 
-class TrafficRepository {
+export class TrafficRepository {
   private cache: LRUCache<string, TrafficRecord>;
 
   constructor() {
@@ -52,4 +52,3 @@ class TrafficRepository {
   }
 }
 
-export const trafficRepository = new TrafficRepository();

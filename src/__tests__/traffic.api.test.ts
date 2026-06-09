@@ -1,8 +1,6 @@
 import request from "supertest";
-import app from "../app";
-import { trafficRepository } from "../repositories/traffic.repository";
-import { appRepository } from "../repositories/app.repository";
-import { rateLimitStore } from "../middleware/trafficRateLimit";
+import { Application } from "express";
+import { createApp } from "../app";
 
 const VALID_RECORD = {
   sourceIp: "192.168.1.1",
@@ -12,10 +10,10 @@ const VALID_RECORD = {
   timestamp: "2026-06-01T10:00:00.000Z",
 };
 
-beforeEach(async () => {
-  trafficRepository.clear();
-  appRepository.clear();
-  await rateLimitStore.resetAll();
+// Each test gets a fresh app — no manual repository or rate-limiter clearing needed
+let app: Application;
+beforeEach(() => {
+  app = createApp();
 });
 
 // ---------------------------------------------------------------------------
@@ -266,9 +264,8 @@ describe("GET /api/traffic", () => {
   });
 
   it("returns empty records when nothing has been ingested", async () => {
-    trafficRepository.clear();
-    appRepository.clear();
-    const res = await request(app).get("/api/traffic");
+    const emptyApp = createApp();
+    const res = await request(emptyApp).get("/api/traffic");
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ total: 0, totalPages: 0, records: [] });
@@ -288,30 +285,20 @@ describe("GET /api/traffic", () => {
 describe("GET /api/stats", () => {
   it("reflects correct counts after ingestion", async () => {
     await request(app).post("/api/traffic").send(VALID_RECORD);
-    await request(app)
-      .post("/api/traffic")
-      .send({ ...VALID_RECORD, userId: "user-2" });
-    await request(app)
-      .post("/api/traffic")
-      .send({ ...VALID_RECORD, destinationApp: "notion" });
+    await request(app).post("/api/traffic").send({ ...VALID_RECORD, userId: "user-2" });
+    await request(app).post("/api/traffic").send({ ...VALID_RECORD, destinationApp: "notion" });
 
     const res = await request(app).get("/api/stats");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      totalTrafficRecords: 3,
-      totalDiscoveredApps: 2,
-    });
+    expect(res.body).toEqual({ totalTrafficRecords: 3, totalDiscoveredApps: 2 });
   });
 
   it("returns zeros when the store is empty", async () => {
     const res = await request(app).get("/api/stats");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      totalTrafficRecords: 0,
-      totalDiscoveredApps: 0,
-    });
+    expect(res.body).toEqual({ totalTrafficRecords: 0, totalDiscoveredApps: 0 });
   });
 });
 
@@ -334,7 +321,6 @@ describe("GET /api/apps/:id/users", () => {
   let appId: string;
 
   beforeEach(async () => {
-    // Discover slack with user-1 (oauth) then user-2 (saml)
     const first = await request(app).post("/api/traffic").send(VALID_RECORD);
     appId = first.body.app.id;
 
@@ -342,7 +328,6 @@ describe("GET /api/apps/:id/users", () => {
       .post("/api/traffic")
       .send({ ...VALID_RECORD, userId: "user-2", authType: "saml" });
 
-    // A second app — user-3 only
     await request(app)
       .post("/api/traffic")
       .send({ ...VALID_RECORD, destinationApp: "notion", userId: "user-3", authType: "basic" });
@@ -356,43 +341,16 @@ describe("GET /api/apps/:id/users", () => {
     expect(res.body.users).toHaveLength(2);
   });
 
-  it("paginates correctly — page 1 of 2 with limit=1", async () => {
-    const res = await request(app).get(`/api/apps/${appId}/users?page=1&limit=1`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.users).toHaveLength(1);
-    expect(res.body).toMatchObject({ page: 1, limit: 1, total: 2, totalPages: 2 });
-  });
-
-  it("paginates correctly — page 2 of 2 with limit=1", async () => {
-    const res = await request(app).get(`/api/apps/${appId}/users?page=2&limit=1`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.users).toHaveLength(1);
-    expect(res.body).toMatchObject({ page: 2, limit: 1, total: 2, totalPages: 2 });
-  });
-
-  it("returns 400 for invalid pagination params", async () => {
-    const res = await request(app).get(`/api/apps/${appId}/users?limit=0`);
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Invalid pagination parameters");
-  });
-
   it("returns each user with userId, firstSeen, lastSeen, authTypesUsed", async () => {
     const res = await request(app).get(`/api/apps/${appId}/users`);
 
     const u1 = res.body.users.find((u: any) => u.userId === "user-1");
-    expect(u1).toMatchObject({
-      userId: "user-1",
-      authTypesUsed: ["oauth"],
-    });
+    expect(u1).toMatchObject({ userId: "user-1", authTypesUsed: ["oauth"] });
     expect(u1.firstSeen).toBeDefined();
     expect(u1.lastSeen).toBeDefined();
   });
 
   it("tracks auth types per user individually", async () => {
-    // user-1 accesses slack again with a different authType
     await request(app)
       .post("/api/traffic")
       .send({ ...VALID_RECORD, userId: "user-1", authType: "none" });
@@ -423,6 +381,29 @@ describe("GET /api/apps/:id/users", () => {
     expect(u1.firstSeen).toBe(VALID_RECORD.timestamp);
   });
 
+  it("paginates correctly — page 1 of 2 with limit=1", async () => {
+    const res = await request(app).get(`/api/apps/${appId}/users?page=1&limit=1`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.users).toHaveLength(1);
+    expect(res.body).toMatchObject({ page: 1, limit: 1, total: 2, totalPages: 2 });
+  });
+
+  it("paginates correctly — page 2 of 2 with limit=1", async () => {
+    const res = await request(app).get(`/api/apps/${appId}/users?page=2&limit=1`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.users).toHaveLength(1);
+    expect(res.body).toMatchObject({ page: 2, limit: 1, total: 2, totalPages: 2 });
+  });
+
+  it("returns 400 for invalid pagination params", async () => {
+    const res = await request(app).get(`/api/apps/${appId}/users?limit=0`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid pagination parameters");
+  });
+
   it("returns 404 for an unknown app id", async () => {
     const res = await request(app).get(
       "/api/apps/00000000-0000-0000-0000-000000000000/users"
@@ -444,10 +425,8 @@ describe("Rate limiting on POST /api/traffic", () => {
     const responses = await Promise.all(requests);
     const statuses = responses.map((r) => r.status);
 
-    // All 100 within limit should succeed
     expect(statuses.every((s) => s === 201)).toBe(true);
 
-    // 101st request from the same IP should be rejected
     const over = await request(app).post("/api/traffic").send(VALID_RECORD);
     expect(over.status).toBe(429);
     expect(over.body.error).toBe("Too many requests");
@@ -459,11 +438,9 @@ describe("Rate limiting on POST /api/traffic", () => {
     );
     await Promise.all(requests);
 
-    // Same IP → blocked
     const blocked = await request(app).post("/api/traffic").send(VALID_RECORD);
     expect(blocked.status).toBe(429);
 
-    // Different sourceIp → allowed
     const allowed = await request(app)
       .post("/api/traffic")
       .send({ ...VALID_RECORD, sourceIp: "10.0.0.99" });

@@ -2,8 +2,8 @@ import { randomUUID } from "crypto";
 import { TrafficRecord, PaginatedTraffic } from "../models/traffic.model";
 import { AppProfile, PaginatedApps, PaginatedUsers } from "../models/app.model";
 import { TrafficRecordInput } from "../schemas/traffic.schema";
-import { trafficRepository } from "../repositories/traffic.repository";
-import { appRepository } from "../repositories/app.repository";
+import { TrafficRepository } from "../repositories/traffic.repository";
+import { AppRepository } from "../repositories/app.repository";
 
 export interface IngestResult {
   record: TrafficRecord;
@@ -11,20 +11,23 @@ export interface IngestResult {
   discovered: boolean;
 }
 
-class TrafficService {
-  ingest(input: TrafficRecordInput): IngestResult {
-    const now = new Date();
+export class TrafficService {
+  constructor(
+    private readonly trafficRepo: TrafficRepository,
+    private readonly appRepo: AppRepository
+  ) {}
 
+  ingest(input: TrafficRecordInput): IngestResult {
     const record: TrafficRecord = {
       id: randomUUID(),
       ...input,
-      ingestedAt: now,
+      ingestedAt: new Date(),
     };
 
-    trafficRepository.save(record);
+    this.trafficRepo.save(record);
 
     const seenAt = new Date(input.timestamp);
-    const { app, isNew } = appRepository.upsertFromTraffic(
+    const { app, isNew } = this.appRepo.upsertFromTraffic(
       input.destinationApp,
       input.authType,
       input.userId,
@@ -33,15 +36,15 @@ class TrafficService {
 
     return {
       record,
-      app: appRepository.toProfile(app),
+      app: this.appRepo.toProfile(app),
       discovered: isNew,
     };
   }
 
   getApps(page: number, limit: number): PaginatedApps {
-    const { items, total } = appRepository.findPaginated(page, limit);
+    const { items, total } = this.appRepo.findPaginated(page, limit);
     return {
-      apps: items.map((app) => appRepository.toProfile(app)),
+      apps: items.map((app) => this.appRepo.toProfile(app)),
       page,
       limit,
       total,
@@ -50,12 +53,12 @@ class TrafficService {
   }
 
   getAppByName(name: string): AppProfile | undefined {
-    const app = appRepository.findByName(name);
-    return app ? appRepository.toProfile(app) : undefined;
+    const app = this.appRepo.findByName(name);
+    return app ? this.appRepo.toProfile(app) : undefined;
   }
 
   getAppUsers(appId: string, page: number, limit: number): PaginatedUsers | undefined {
-    const result = appRepository.getUsersForApp(appId, page, limit);
+    const result = this.appRepo.getUsersForApp(appId, page, limit);
     if (!result) return undefined;
     return {
       users: result.items,
@@ -67,7 +70,7 @@ class TrafficService {
   }
 
   getTraffic(page: number, limit: number): PaginatedTraffic {
-    const { items, total } = trafficRepository.findPaginated(page, limit);
+    const { items, total } = this.trafficRepo.findPaginated(page, limit);
     return {
       records: items,
       page,
@@ -79,10 +82,8 @@ class TrafficService {
 
   getStats(): { totalTrafficRecords: number; totalDiscoveredApps: number } {
     return {
-      totalTrafficRecords: trafficRepository.count(),
-      totalDiscoveredApps: appRepository.count(),
+      totalTrafficRecords: this.trafficRepo.count(),
+      totalDiscoveredApps: this.appRepo.count(),
     };
   }
 }
-
-export const trafficService = new TrafficService();

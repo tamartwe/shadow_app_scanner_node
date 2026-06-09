@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
 import { TrafficRecordSchema } from "../schemas/traffic.schema";
 import { PaginationSchema } from "../schemas/pagination.schema";
-import { trafficService } from "../services/traffic.service";
+import { TrafficService } from "../services/traffic.service";
 
-class TrafficController {
+export class TrafficController {
+  constructor(private readonly service: TrafficService) {}
+
   ingestTraffic(req: Request, res: Response): void {
     const parseResult = TrafficRecordSchema.safeParse(req.body);
 
@@ -15,7 +17,7 @@ class TrafficController {
       return;
     }
 
-    const result = trafficService.ingest(parseResult.data);
+    const result = this.service.ingest(parseResult.data);
 
     res.status(201).json({
       message: result.discovered
@@ -47,12 +49,12 @@ class TrafficController {
     }
 
     const { page, limit } = parseResult.data;
-    res.status(200).json(trafficService.getApps(page, limit));
+    res.status(200).json(this.service.getApps(page, limit));
   }
 
   getApp(req: Request, res: Response): void {
     const name = req.params["name"] as string;
-    const app = trafficService.getAppByName(name);
+    const app = this.service.getAppByName(name);
 
     if (!app) {
       res.status(404).json({ error: `App '${name}' not found` });
@@ -75,7 +77,7 @@ class TrafficController {
     }
 
     const { page, limit } = pageResult.data;
-    const result = trafficService.getAppUsers(id, page, limit);
+    const result = this.service.getAppUsers(id, page, limit);
 
     if (!result) {
       res.status(404).json({ error: `App '${id}' not found` });
@@ -96,12 +98,10 @@ class TrafficController {
     }
 
     const { page, limit } = pageResult.data;
-    res.status(200).json(trafficService.getTraffic(page, limit));
+    res.status(200).json(this.service.getTraffic(page, limit));
   }
 
   getStats(_req: Request, res: Response): void {
-    res.status(200).json(trafficService.getStats());
+    res.status(200).json(this.service.getStats());
   }
 }
-
-export const trafficController = new TrafficController();

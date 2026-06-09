@@ -9,7 +9,7 @@ import {
 } from "../models/app.model";
 import { AuthType } from "../models/traffic.model";
 
-class AppRepository {
+export class AppRepository {
   // Dual index: O(1) lookup by both id and name
   private byId: Map<string, DiscoveredApp> = new Map();
   private byName: Map<string, DiscoveredApp> = new Map();
@@ -141,4 +141,3 @@ class AppRepository {
   }
 }
 
-export const appRepository = new AppRepository();
