@@ -13,6 +13,10 @@ export function createTrafficRouter(
 
   router.get("/apps", (req, res) => controller.listApps(req, res));
 
+  // IMPORTANT: /apps/:id/users must be registered BEFORE /apps/:name.
+  // Express matches routes in registration order. Because /:name is a wildcard
+  // it would capture "/apps/<uuid>/users" as a name lookup if it came first,
+  // and listAppUsers would never be reached. Do not reorder these two routes.
   router.get("/apps/:id/users", (req, res) => controller.listAppUsers(req, res));
 
   router.get("/apps/:name", (req, res) => controller.getApp(req, res));
