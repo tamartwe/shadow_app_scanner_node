@@ -239,21 +239,21 @@ describe("GET /api/apps", () => {
       .post("/api/traffic")
       .send({ ...VALID_RECORD, timestamp: earlierTimestamp });
 
-    const res = await request(app).get("/api/apps/slack");
+    const res = await request(app).get("/api/apps/lookup?name=slack");
     expect(res.body.app.lastSeen).toBe(laterTimestamp);
   });
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/apps/:name
+// GET /api/apps/lookup?name=
 // ---------------------------------------------------------------------------
-describe("GET /api/apps/:name", () => {
+describe("GET /api/apps/lookup", () => {
   beforeEach(async () => {
     await request(app).post("/api/traffic").send(VALID_RECORD);
   });
 
   it("returns a single app profile by name with id", async () => {
-    const res = await request(app).get("/api/apps/slack");
+    const res = await request(app).get("/api/apps/lookup?name=slack");
 
     expect(res.status).toBe(200);
     expect(res.body.app.name).toBe("slack");
@@ -262,10 +262,24 @@ describe("GET /api/apps/:name", () => {
   });
 
   it("returns 404 for an unknown app name", async () => {
-    const res = await request(app).get("/api/apps/does-not-exist");
+    const res = await request(app).get("/api/apps/lookup?name=does-not-exist");
 
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/does-not-exist/);
+  });
+
+  it("returns 400 when name query param is missing", async () => {
+    const res = await request(app).get("/api/apps/lookup");
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Query parameter 'name' is required");
+  });
+
+  it("returns 400 when name query param is empty", async () => {
+    const res = await request(app).get("/api/apps/lookup?name=");
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Query parameter 'name' is required");
   });
 });
 

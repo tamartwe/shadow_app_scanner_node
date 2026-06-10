@@ -62,8 +62,14 @@ export class TrafficController {
 
   getApp(req: Request, res: Response, next: NextFunction): void {
     try {
-      const name = req.params["name"] as string;
-      const app = this.service.getAppByName(name);
+      const name = req.query["name"];
+
+      if (typeof name !== "string" || name.trim() === "") {
+        res.status(400).json({ error: "Query parameter 'name' is required" });
+        return;
+      }
+
+      const app = this.service.getAppByName(name.trim());
 
       if (!app) {
         res.status(404).json({ error: `App '${name}' not found` });
